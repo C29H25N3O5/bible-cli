@@ -22,29 +22,31 @@
 
 ```bash
 bible [options] "Book Chapter:Verse"
+```
 
-Example
+### Example
 
-bible -v -i -t web "Romans 8:38–39"
+```bash
+bible -v -i -t web Romans 8:38–39
+```
 
-🛠 Options
+## 🛠 Options
 
-Option	Description
--v, --verse	Show verse numbers
--n, --no-break	Output as a single paragraph
--i, --info	Show reference and translation info
--t, --translation	Choose Bible version (web, kjv, etc.)
--c, --copy	Copy output to clipboard
--d, --debug	Print debug info and raw API response
--h, --help	Show help message
+`-v`, `--verse`: Show verse numbers
+`-n`, `--no-break`: Output as a single paragraph
+`-i`, `--info`: Show reference and translation info
+`-t`, `--translation`: Choose Bible version (web, kjv, etc.)
+`-c`, `--copy`: Copy output to clipboard
+`-d`, `--debug`: Print debug info and raw API response
+`-h`, `--help`: Show help message
 
 ## 📦 Installation (WIP)
 
 This tool is currently under development. When finished, you’ll be able to:
-	•	Install via brew
-	•	Or just clone and run the script directly
+- Install via brew
+- Or just clone and run the script directly
 
-⚖️ License
+## License
 
-GNU v.3.0 License
+GNU General Public License v3.0
 
