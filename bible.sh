@@ -4,7 +4,7 @@
 # Usage: bible -t [translation] "Book Chapter" or "Book Chapter:Verse"
 
 # Default translation
-translation="YLT"
+translation="WEB"
 
 # Helper functions
 
@@ -21,7 +21,7 @@ get_book_id() {
 
   # Download and cache if not exists
   if [[ ! -f "$cache" ]]; then
-    curl -s "https://bolls.life/get-books/$translation/" -o "$cache"
+    curl -s --max-time 5 "https://bolls.life/get-books/$translation/" -o "$cache"
   fi
 
 jq --arg name "$(echo "$bookname" | tr '[:upper:]' '[:lower:]')" '
@@ -32,8 +32,19 @@ jq --arg name "$(echo "$bookname" | tr '[:upper:]' '[:lower:]')" '
 parse_reference() {
   local ref="$1"
 
-  # Case 1: Book Chapter:Start-End
-  if [[ "$ref" =~ ^([^0-9]+)\ ([0-9]+):([0-9]+)-([0-9]+)$ ]]; then
+  # Case 0: Book StartChapter:StartVerse-EndChapter:EndVerse (allow hyphen, en dash, em dash)
+  if [[ "$ref" =~ ^([^0-9]+)\ ([0-9]+):([0-9]+)[-–—]([0-9]+):([0-9]+)$ ]]; then
+    BOOK="${BASH_REMATCH[1]}"
+    START_CHAPTER="${BASH_REMATCH[2]}"
+    START_VERSE="${BASH_REMATCH[3]}"
+    END_CHAPTER="${BASH_REMATCH[4]}"
+    END_VERSE="${BASH_REMATCH[5]}"
+    CROSS_CHAPTER_RANGE=1
+    return
+  fi
+
+  # Case 1: Book Chapter:Start-End (allow hyphen, en dash, em dash)
+  if [[ "$ref" =~ ^([^0-9]+)\ ([0-9]+):([0-9]+)[-–—]([0-9]+)$ ]]; then
     BOOK="${BASH_REMATCH[1]}"
     CHAPTER="${BASH_REMATCH[2]}"
     VERSE=""
@@ -71,7 +82,7 @@ fetch_from_bolls() {
   if [[ -n "$verse" ]]; then
     local url="https://bolls.life/get-verse/$translation/$bookid/$chapter/$verse/"
     local json
-    json=$(curl -s "$url")
+    json=$(curl -s --max-time 5 "$url")
 
     if echo "$json" | grep -q 'text'; then
       echo "$json" | jq -r '"\(.verse). \(.text)"' | sed 's/<[^>]*>//g'
@@ -100,7 +111,7 @@ verses_json=$(printf '%s\n' "${VERSE_RANGE[@]}" | jq -R 'tonumber' | jq -s .)
     )
 
     local json
-    json=$(curl -s -X POST \
+    json=$(curl -s --max-time 5 -X POST \
       -H "Content-Type: application/json" \
       -d "$body" https://bolls.life/get-verses/)
 
@@ -115,7 +126,7 @@ verses_json=$(printf '%s\n' "${VERSE_RANGE[@]}" | jq -R 'tonumber' | jq -s .)
   else
     local url="https://bolls.life/get-text/$translation/$bookid/$chapter/"
     local json
-    json=$(curl -s "$url")
+    json=$(curl -s --max-time 5 "$url")
 
     if echo "$json" | grep -q 'text'; then
       echo "$json" | jq -r '.[] | "\(.verse). \(.text)"' | sed 's/<[^>]*>//g'
@@ -135,8 +146,12 @@ bible() {
         translation="$2"
         shift 2
         ;;
+      --book-id)
+        echo "$(get_book_id "$2" "$3")"
+        exit 0
+        ;;
       -h|--help)
-        echo "Usage: bible [-t translation] "Book Chapter[:Verse]""
+        echo "Usage: bible [-t translation] \"Book Chapter[:Verse]\""
         exit 0
         ;;
       -*)
@@ -156,6 +171,12 @@ bible() {
   fi
 
   parse_reference "$ref"
+
+  if [[ "$CROSS_CHAPTER_RANGE" == "1" ]]; then
+    bash "$(dirname "$0")/fetch_cross_chapter.sh" "$translation" "$BOOK" "$START_CHAPTER" "$START_VERSE" "$END_CHAPTER" "$END_VERSE"
+    exit $?
+  fi
+
   bookid=$(get_book_id "$BOOK" "$translation")
 
   if [[ -z "$bookid" ]]; then
