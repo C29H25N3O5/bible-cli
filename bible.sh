@@ -1,149 +1,170 @@
 #!/bin/bash
 
-# bible - Fetch and display Bible verses from bible-api.com
-# Usage: bible [options] "Book Chapter:Verse"
+# bible.sh - Fetch Bible verses or chapters using the Bolls API
+# Usage: bible -t [translation] "Book Chapter" or "Book Chapter:Verse"
 
+# Default translation
+translation="YLT"
+
+# Helper functions
+
+urlencode() {
+  python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(" ".join(sys.argv[1:])))' "$@"
+}
+
+get_book_id() {
+  local bookname="$1"
+  local translation="$2"
+  local cache="$HOME/.cache/bible-cli/books-$translation.json"
+
+  mkdir -p "$(dirname "$cache")"
+
+  # Download and cache if not exists
+  if [[ ! -f "$cache" ]]; then
+    curl -s "https://bolls.life/get-books/$translation/" -o "$cache"
+  fi
+
+jq --arg name "$(echo "$bookname" | tr '[:upper:]' '[:lower:]')" '
+  .[] | select((.name | ascii_downcase) == $name) | .bookid
+' "$cache"
+}
+
+parse_reference() {
+  local ref="$1"
+
+  # Case 1: Book Chapter:Start-End
+  if [[ "$ref" =~ ^([^0-9]+)\ ([0-9]+):([0-9]+)-([0-9]+)$ ]]; then
+    BOOK="${BASH_REMATCH[1]}"
+    CHAPTER="${BASH_REMATCH[2]}"
+    VERSE=""
+    VERSE_RANGE_START="${BASH_REMATCH[3]}"
+    VERSE_RANGE_END="${BASH_REMATCH[4]}"
+    VERSE_RANGE=($(seq "$VERSE_RANGE_START" "$VERSE_RANGE_END"))
+
+  # Case 2: Book Chapter:Verse
+  elif [[ "$ref" =~ ^([^0-9]+)\ ([0-9]+):([0-9]+)$ ]]; then
+    BOOK="${BASH_REMATCH[1]}"
+    CHAPTER="${BASH_REMATCH[2]}"
+    VERSE="${BASH_REMATCH[3]}"
+    VERSE_RANGE=()
+
+  # Case 3: Book Chapter
+  elif [[ "$ref" =~ ^([^0-9]+)\ ([0-9]+)$ ]]; then
+    BOOK="${BASH_REMATCH[1]}"
+    CHAPTER="${BASH_REMATCH[2]}"
+    VERSE=""
+    VERSE_RANGE=()
+
+  else
+    echo "❌ Invalid reference format: '$ref'" >&2
+    exit 1
+  fi
+}
+
+fetch_from_bolls() {
+  local bookid="$1"
+  local chapter="$2"
+  local verse="$3"
+  local translation="$4"
+
+  # Case 1: Single verse
+  if [[ -n "$verse" ]]; then
+    local url="https://bolls.life/get-verse/$translation/$bookid/$chapter/$verse/"
+    local json
+    json=$(curl -s "$url")
+
+    if echo "$json" | grep -q 'text'; then
+      echo "$json" | jq -r '"\(.verse). \(.text)"' | sed 's/<[^>]*>//g'
+    else
+      echo "❌ Could not retrieve verse." >&2
+      return 1
+    fi
+
+  # Case 2: Range of verses
+  elif [[ ${#VERSE_RANGE[@]} -gt 0 ]]; then
+    local verses_json
+verses_json=$(printf '%s\n' "${VERSE_RANGE[@]}" | jq -R 'tonumber' | jq -s .)
+
+    local body
+    body=$(jq -n \
+      --arg translation "$translation" \
+      --argjson book "$bookid" \
+      --argjson chapter "$chapter" \
+      --argjson verses "$verses_json" \
+      '[{
+        translation: $translation,
+        book: $book,
+        chapter: $chapter,
+        verses: $verses
+      }]'
+    )
+
+    local json
+    json=$(curl -s -X POST \
+      -H "Content-Type: application/json" \
+      -d "$body" https://bolls.life/get-verses/)
+
+    if echo "$json" | jq empty 2>/dev/null; then
+      echo "$json" | jq -r '.[0][] | "\(.verse). \(.text)"' | sed 's/<[^>]*>//g'
+    else
+      echo "❌ Could not retrieve multiple verses." >&2
+      return 1
+    fi
+
+  # Case 3: Whole chapter
+  else
+    local url="https://bolls.life/get-text/$translation/$bookid/$chapter/"
+    local json
+    json=$(curl -s "$url")
+
+    if echo "$json" | grep -q 'text'; then
+      echo "$json" | jq -r '.[] | "\(.verse). \(.text)"' | sed 's/<[^>]*>//g'
+    else
+      echo "❌ Could not retrieve chapter." >&2
+      return 1
+    fi
+  fi
+}
+
+# Main CLI handler
 bible() {
-  local show_verses=false
-  local no_break=false
-  local show_info=false
-  local copy=false
-  local translation="web"
-  local debug=false
-  local args=()
-
-  # Parse flags
+  local ref=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      -v|--verse)        show_verses=true; shift ;;
-      -n|--no-break)     no_break=true; shift ;;
-      -i|--info)         show_info=true; shift ;;
-      -t|--translation)  translation="$2"; shift 2 ;;
-      -c|--copy)         copy=true; shift ;;
-      -d|--debug)        debug=true; shift ;;
+      -t|--translation)
+        translation="$2"
+        shift 2
+        ;;
       -h|--help)
-        echo "Usage: bible [options] \"Book Chapter:Verse\""
-        echo "Options:"
-        echo "  -v, --verse         Show verse numbers"
-        echo "  -n, --no-break      Remove line breaks, output as single paragraph"
-        echo "  -i, --info          Append reference and translation info"
-        echo "  -t, --translation   Specify translation (e.g., web, kjv)"
-        echo "  -c, --copy          Copy to clipboard"
-        echo "  -d, --debug         Print raw response and debug info"
-        echo "  -h, --help          Show this help message"
+        echo "Usage: bible [-t translation] "Book Chapter[:Verse]""
         exit 0
         ;;
       -*)
-        echo "Unknown option: $1" >&2
+        echo "Unknown option: $1"
         exit 1
         ;;
       *)
-        args+=("$1")
+        ref="$1"
         shift
         ;;
     esac
   done
 
-  if [[ ${#args[@]} -eq 0 ]]; then
-    echo "Usage: bible [options] \"Book Chapter:Verse\""
-    echo "Options:"
-    echo "  -v, --verse         Show verse numbers"
-    echo "  -n, --no-break      Remove line breaks, output as single paragraph"
-    echo "  -i, --info          Append reference and translation info"
-    echo "  -t, --translation   Specify translation (e.g., web, kjv)"
-    echo "  -c, --copy          Copy to clipboard"
-    echo "  -d, --debug         Print raw response and debug info"
-    echo "  -h, --help          Show this help message"
+  if [[ -z "$ref" ]]; then
+    echo "❌ Please provide a reference like "John 3:16" or "John 3"."
     exit 1
   fi
 
-  # Build query
-  local joined_passage="${args[*]}"
-  local encoded
-  encoded=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote_plus(sys.argv[1]))' "$joined_passage" 2>/dev/null)
-  if [[ $? -ne 0 ]]; then
-    echo "Error: Python3 is required to encode the passage." >&2
-    exit 1
-  fi
-  local url="https://bible-api.com/${encoded}?translation=${translation}"
+  parse_reference "$ref"
+  bookid=$(get_book_id "$BOOK" "$translation")
 
-  # Download
-  local raw
-  raw=$(curl -s "$url")
-  if [[ -z "$raw" ]]; then
-    echo "Error: Failed to fetch data from API." >&2
+  if [[ -z "$bookid" ]]; then
+    echo "❌ Could not find book: $BOOK in $translation."
     exit 1
   fi
 
-  if [[ "$debug" == true ]]; then
-    echo "[Debug] Fetching URL: $url" >&2
-    echo "$raw" > /tmp/bible-api-response.json
-    echo "[Debug] Response saved to /tmp/bible-api-response.json" >&2
-  fi
-
-  # Create a temporary file for the JSON data
-  local temp_file
-  temp_file=$(mktemp)
-  echo "$raw" > "$temp_file"
-
-  # Run Python script with the temp file path as an argument
-  local output
-  output=$(python3 - "$show_verses" "$no_break" "$show_info" "$temp_file" <<'PY' 2>/dev/null
-import sys, json
-
-show_verses = sys.argv[1].lower() == "true"
-no_break = sys.argv[2].lower() == "true"
-show_info = sys.argv[3].lower() == "true"
-with open(sys.argv[4], 'r') as f:
-    data = json.load(f, strict=False)
-
-try:
-    verses = data['verses']
-    processed_texts = [verse['text'].replace('\n', ' ').strip() for verse in verses]
-
-    if no_break:
-        if show_verses:
-            texts = [f"[{verse['verse']}] {text}" for verse, text in zip(verses, processed_texts)]
-        else:
-            texts = processed_texts
-        main_text = ' '.join(texts)
-    else:
-        if show_verses:
-            main_text = '\n'.join([f"{verse['verse']}. {text}" for verse, text in zip(verses, processed_texts)])
-        else:
-            main_text = '\n'.join(processed_texts)
-
-    print(main_text)
-
-    if show_info:
-        info = f"{data['reference']}, {data['translation_name']}"
-        print('\n' + info)
-except Exception as e:
-    print(f"Error: Failed to extract verse: {e}", file=sys.stderr)
-    sys.exit(1)
-PY
-)
-
-  local python_status=$?
-
-  # Clean up the temporary file
-  rm "$temp_file"
-
-  # Check if Python script failed
-  if [[ $python_status -ne 0 ]]; then
-    echo "Error: Failed to process API response." >&2
-    exit 1
-  fi
-
-  # Output result
-  echo "$output"
-
-  # Copy to clipboard if requested
-  if [[ "$copy" == true ]]; then
-    command -v pbcopy >/dev/null && { echo "$output" | pbcopy; echo "[Copied to clipboard 📋]"; }
-  fi
+  fetch_from_bolls "$bookid" "$CHAPTER" "$VERSE" "$translation"
 }
 
-# Execute the bible function with all arguments
+# Entry point
 bible "$@"
-

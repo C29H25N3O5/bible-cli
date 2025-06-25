@@ -1,6 +1,6 @@
 # 📖 bible-cli (WIP)
 
-`bible-cli` is a simple command-line tool to fetch and display Bible passages directly in your terminal. It uses the Bible Gateway’s API to retrieve scripture in plain text with support for multiple translations.
+`bible-cli` is a simple command-line tool to fetch and display Bible passages directly in your terminal. It uses the Bolls API to retrieve scripture in plain text with support for multiple translations.
 
 > ⚠️ This project is a work in progress. It's already functional but may be refined further for features, performance, or packaging.
 
