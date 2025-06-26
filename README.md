@@ -56,7 +56,8 @@ GNU General Public License v3.0
 - [X] `KJV` uses non-Strong’s number version of KJV
 - [X] Verses spanning multiple paragraphs
 - [ ] Listing available translations (for a language)
-- [ ] Support for abbreviated chapter names
+- [X] Support for abbreviated chapter names
+- [ ] Support for Jewish verse numbering
 - [ ] Formatting
 - [ ] Random verse
 - [ ] Definition for Hebrew and Greek words

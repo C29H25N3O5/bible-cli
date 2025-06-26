@@ -3,9 +3,93 @@
 # bible.sh - Fetch Bible verses or chapters using the Bolls API
 # Usage: bible -t [translation] "Book Chapter" or "Book Chapter:Verse"
 
+
 # Default translation
 translation="WEB"
 include_strongs=false
+
+# Jewish/Masoretic reference mode flag
+# When true, remaps references to Jewish chapter/verse numbering for known books.
+# This affects output references and fetched verses.
+use_masoretic=false
+# -------------------------------------------
+# Remap Christian reference to Masoretic Jewish numbering where known differences occur.
+# This function adjusts BOOK, CHAPTER, VERSE, VERSE_RANGE, etc. as needed.
+# Examples:
+# - Genesis 31/32: Jewish Genesis 32:1 = Christian Genesis 31:55
+# - Psalms: Psalm titles are counted as verse 1 in Jewish, so add +1 to verse numbers.
+# - Joel: Jewish Joel 3:1 = Christian Joel 2:28, chapters shifted by +1 after ch 2
+# - Malachi: Jewish Malachi 3:23 = Christian Malachi 4:5 (Malachi has 4 chapters Christian, 3 Jewish)
+# Only known differences are handled.
+remap_reference_to_masoretic() {
+  # Only remap certain books
+  case "$BOOK" in
+    Genesis)
+      # Genesis 32:1 in Jewish = 31:55 in Christian; Christian 32:1 = Jewish 32:2
+      # If reference is Genesis 32, shift verses by -1 for verse 1, else unchanged
+      if [[ "$CHAPTER" == "32" ]]; then
+        if [[ -n "$VERSE" && "$VERSE" == "1" ]]; then
+          CHAPTER="31"
+          VERSE="55"
+        elif [[ -n "${VERSE_RANGE[*]}" ]]; then
+          # If verse range includes 1, shift 1 to 31:55, rest unchanged
+          for i in "${!VERSE_RANGE[@]}"; do
+            if [[ "${VERSE_RANGE[$i]}" == "1" ]]; then
+              VERSE_RANGE[$i]="55"
+              CHAPTER="31"
+            fi
+          done
+        fi
+      fi
+      ;;
+    Psalms)
+      # In Jewish numbering, Psalm titles are verse 1, so all verse numbers shift +1
+      # e.g., Christian 23:1 = Jewish 23:2
+      if [[ -n "$VERSE" ]]; then
+        ((VERSE=VERSE+1))
+      elif [[ -n "${VERSE_RANGE[*]}" ]]; then
+        for i in "${!VERSE_RANGE[@]}"; do
+          ((VERSE_RANGE[$i]=VERSE_RANGE[$i]+1))
+        done
+      fi
+      ;;
+    Joel)
+      # In Jewish, Joel is 4 chapters; Christian is 3. Chapter 3 in Christian = 4 in Jewish.
+      # Christian 2:28-32 = Jewish 3:1-5
+      if [[ -n "$CHAPTER" ]]; then
+        if (( CHAPTER == 3 )); then
+          CHAPTER=4
+        elif (( CHAPTER == 2 )) && [[ -n "$VERSE" ]] && (( VERSE >= 28 )); then
+          CHAPTER=3
+          ((VERSE=VERSE-27))
+        elif (( CHAPTER == 2 )) && [[ -n "${VERSE_RANGE[*]}" ]] && (( VERSE_RANGE[0] >= 28 )); then
+          CHAPTER=3
+          for i in "${!VERSE_RANGE[@]}"; do
+            ((VERSE_RANGE[$i]=VERSE_RANGE[$i]-27))
+          done
+        fi
+      fi
+      ;;
+    Malachi)
+      # Christian Malachi has 4 chapters, Jewish has 3; Christian 4:1 = Jewish 3:19
+      if [[ -n "$CHAPTER" ]]; then
+        if (( CHAPTER == 4 )); then
+          CHAPTER=3
+          if [[ -n "$VERSE" ]]; then
+            ((VERSE=VERSE+18))
+          elif [[ -n "${VERSE_RANGE[*]}" ]]; then
+            for i in "${!VERSE_RANGE[@]}"; do
+              ((VERSE_RANGE[$i]=VERSE_RANGE[$i]+18))
+            done
+          fi
+        fi
+      fi
+      ;;
+    *)
+      # No remapping for other books
+      ;;
+  esac
+}
 
 # Helper functions
 
@@ -284,6 +368,7 @@ handle_multi_reference() {
   exit 0
 }
 
+
 # Main CLI handler
 bible() {
   local ref=""
@@ -301,8 +386,12 @@ bible() {
         include_strongs=true
         shift
         ;;
+      -j|--jewish)
+        use_masoretic=true
+        shift
+        ;;
       -h|--help)
-        echo "Usage: bible [-t translation] \"Book Chapter[:Verse]\""
+        echo "Usage: bible [-t translation] [-j|--jewish] \"Book Chapter[:Verse]\""
         exit 0
         ;;
       -*)
@@ -317,7 +406,7 @@ bible() {
   done
 
   if [[ -z "$ref" ]]; then
-    echo "❌ Please provide a reference like "John 3:16" or "John 3"."
+    echo "❌ Please provide a reference like \"John 3:16\" or \"John 3\"."
     exit 1
   fi
 
@@ -327,6 +416,9 @@ bible() {
   fi
 
   parse_reference "$ref"
+  if [[ "$use_masoretic" == true ]]; then
+    remap_reference_to_masoretic
+  fi
 
   if [[ "$CROSS_CHAPTER_RANGE" == "1" ]]; then
     bash "$(dirname "$0")/fetch_cross_chapter.sh" "$translation" "$BOOK" "$START_CHAPTER" "$START_VERSE" "$END_CHAPTER" "$END_VERSE"
@@ -338,6 +430,11 @@ bible() {
   if [[ -z "$bookid" ]]; then
     echo "❌ Could not find book: $BOOK in $translation."
     exit 1
+  fi
+
+  # Print reference, noting Masoretic/Jewish if in that mode
+  if [[ "$use_masoretic" == true ]]; then
+    echo "Jewish/Masoretic numbering: $BOOK ${CHAPTER}${VERSE:+:$VERSE}"
   fi
 
   fetch_from_bolls "$bookid" "$CHAPTER" "$VERSE" "$translation"
