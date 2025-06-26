@@ -131,6 +131,17 @@ parse_reference() {
     return
   fi
 
+  # Case 3A: Book StartChapter-EndChapter (allow hyphen, en dash, em dash)
+  if [[ "$ref" =~ ^(.+)\ ([0-9]+)[-–—]([0-9]+)$ ]]; then
+    BOOK="${BASH_REMATCH[1]}"
+    START_CHAPTER="${BASH_REMATCH[2]}"
+    END_CHAPTER="${BASH_REMATCH[3]}"
+    CROSS_CHAPTER_RANGE=1
+    START_VERSE=1
+    END_VERSE=999
+    return
+  fi
+
   # Case 1: Book Chapter:Start-End (allow hyphen, en dash, em dash)
   if [[ "$ref" =~ ^(.+)\ ([0-9]+):([0-9]+)[-–—]([0-9]+)$ ]]; then
     BOOK="${BASH_REMATCH[1]}"
@@ -225,6 +236,43 @@ verses_json=$(printf '%s\n' "${VERSE_RANGE[@]}" | jq -R 'tonumber' | jq -s .)
   fi
 }
 
+handle_multi_reference() {
+  local allrefs="$1"
+  local translation="$2"
+  local IFS_old="$IFS"
+  IFS=',;'
+  last_book=""
+  last_chapter=""
+  for segment in $allrefs; do
+    segment="$(echo "$segment" | xargs)"  # trim whitespace
+    # Inherit book/chapter context when omitted
+    if [[ -n "$last_book" ]]; then
+      if [[ "$segment" =~ ^[0-9]+([-–—][0-9]+)?$ ]]; then
+        # verse or verse-range only
+        segment="$last_book $last_chapter:$segment"
+      elif [[ "$segment" =~ ^[0-9]+:[0-9]+([-–—][0-9]+)?$ ]]; then
+        # chapter:verse or range without book
+        segment="$last_book $segment"
+      fi
+    fi
+    # Reset CROSS_CHAPTER_RANGE flag
+    CROSS_CHAPTER_RANGE=0
+    parse_reference "$segment"
+    # Update context for next segments
+    last_book="$BOOK"
+    last_chapter="${CHAPTER:-$START_CHAPTER}"
+    if [[ "$CROSS_CHAPTER_RANGE" == "1" ]]; then
+      bash "$(dirname "$0")/fetch_cross_chapter.sh" "$translation" "$BOOK" "$START_CHAPTER" "$START_VERSE" "$END_CHAPTER" "$END_VERSE"
+    else
+      local bookid
+      bookid=$(get_book_id "$BOOK" "$translation")
+      fetch_from_bolls "$bookid" "$CHAPTER" "$VERSE" "$translation"
+    fi
+  done
+  IFS="$IFS_old"
+  exit 0
+}
+
 # Main CLI handler
 bible() {
   local ref=""
@@ -256,6 +304,11 @@ bible() {
   if [[ -z "$ref" ]]; then
     echo "❌ Please provide a reference like "John 3:16" or "John 3"."
     exit 1
+  fi
+
+  # Handle comma- or semicolon-separated references
+  if [[ "$ref" =~ [,\;] ]]; then
+    handle_multi_reference "$ref" "$translation"
   fi
 
   parse_reference "$ref"
