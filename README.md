@@ -53,7 +53,7 @@ This tool is currently under development. When finished, you’ll be able to:
 GNU General Public License v3.0
 
 ## Todos
-- [ ] `KJV` uses non-Strong’s number version of KJV
+- [X] `KJV` uses non-Strong’s number version of KJV
 - [X] Verses spanning multiple paragraphs
 - [ ] Listing available translations (for a language)
 - [ ] Support for abbreviated chapter names

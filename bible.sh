@@ -5,6 +5,7 @@
 
 # Default translation
 translation="WEB"
+include_strongs=false
 
 # Helper functions
 
@@ -177,6 +178,13 @@ fetch_from_bolls() {
   local verse="$3"
   local translation="$4"
 
+  # Determine how to handle Strong's tags
+  if [[ "$include_strongs" == true ]]; then
+    strong_pattern="s:<S>([0-9]+)</S>:(\\1):g"
+  else
+    strong_pattern="s:<S>[0-9]+</S>::g"
+  fi
+
   # Case 1: Single verse
   if [[ -n "$verse" ]]; then
     local url="https://bolls.life/get-verse/$translation/$bookid/$chapter/$verse/"
@@ -184,7 +192,8 @@ fetch_from_bolls() {
     json=$(curl -s --max-time 5 "$url")
 
     if echo "$json" | grep -q 'text'; then
-      echo "$json" | jq -r '"\(.verse). \(.text)"' | sed 's/<[^>]*>//g'
+      eval "echo \"\$json\" | jq -r '\"\(.verse). \(.text)\"' \
+        | sed -E \"$strong_pattern; s:<sup>[^<]*</sup>::g; s:<[^>]+>::g; s/ +([,.;:?!])/\1/g\""
     else
       echo "❌ Could not retrieve verse." >&2
       return 1
@@ -215,7 +224,8 @@ verses_json=$(printf '%s\n' "${VERSE_RANGE[@]}" | jq -R 'tonumber' | jq -s .)
       -d "$body" https://bolls.life/get-verses/)
 
     if echo "$json" | jq empty 2>/dev/null; then
-      echo "$json" | jq -r '.[0][] | "\(.verse). \(.text)"' | sed 's/<[^>]*>//g'
+      eval "echo \"\$json\" | jq -r '.[0][] | \"\(.verse). \(.text)\"' \
+        | sed -E \"$strong_pattern; s:<sup>[^<]*</sup>::g; s:<[^>]+>::g; s/ +([,.;:?!])/\1/g\""
     else
       echo "❌ Could not retrieve multiple verses." >&2
       return 1
@@ -228,7 +238,8 @@ verses_json=$(printf '%s\n' "${VERSE_RANGE[@]}" | jq -R 'tonumber' | jq -s .)
     json=$(curl -s --max-time 5 "$url")
 
     if echo "$json" | grep -q 'text'; then
-      echo "$json" | jq -r '.[] | "\(.verse). \(.text)"' | sed 's/<[^>]*>//g'
+      eval "echo \"\$json\" | jq -r '.[] | \"\(.verse). \(.text)\"' \
+        | sed -E \"$strong_pattern; s:<sup>[^<]*</sup>::g; s:<[^>]+>::g; s/ +([,.;:?!])/\1/g\""
     else
       echo "❌ Could not retrieve chapter." >&2
       return 1
@@ -285,6 +296,10 @@ bible() {
       --book-id)
         echo "$(get_book_id "$2" "$3")"
         exit 0
+        ;;
+      -s|--strong)
+        include_strongs=true
+        shift
         ;;
       -h|--help)
         echo "Usage: bible [-t translation] \"Book Chapter[:Verse]\""
