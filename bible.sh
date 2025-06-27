@@ -372,6 +372,7 @@ handle_multi_reference() {
 # Main CLI handler
 bible() {
   local ref=""
+  local list_language=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
       -t|--translation)
@@ -390,8 +391,17 @@ bible() {
         use_masoretic=true
         shift
         ;;
+      -l|--list)
+        list_language="$2"
+        shift 2
+        ;;
       -h|--help)
-        echo "Usage: bible [-t translation] [-j|--jewish] \"Book Chapter[:Verse]\""
+        echo "Usage: bible [-t translation] [-j|--jewish] [-l language] \"Book Chapter[:Verse]\""
+        echo "  -t, --translation   Specify translation short code (default: WEB)"
+        echo "  -j, --jewish       Use Jewish/Masoretic numbering for known books"
+        echo "  -l, --list LANG    List available translations for a language (case-insensitive substring match)"
+        echo "  -s, --strong       Include Strong's numbers (if available)"
+        echo "  -h, --help         Show this help"
         exit 0
         ;;
       -*)
@@ -404,6 +414,34 @@ bible() {
         ;;
     esac
   done
+
+  # Handle listing of translations for a language
+  if [[ -n "$list_language" ]]; then
+    local lang_json
+    lang_json=$(curl -s --max-time 8 "https://bolls.life/static/bolls/app/views/languages.json")
+    if [[ -z "$lang_json" ]]; then
+      echo "❌ Could not fetch language list." >&2
+      exit 1
+    fi
+    # Find matching language (case-insensitive substring match)
+    local lang_entry
+    lang_entry=$(echo "$lang_json" | jq --arg q "$list_language" '
+      .[] | select(.language | ascii_downcase | test($q|ascii_downcase))
+    ')
+    if [[ -z "$lang_entry" ]]; then
+      echo "❌ No language found matching: $list_language" >&2
+      exit 1
+    fi
+    # Count number of translations
+    local count
+    count=$(echo "$lang_entry" | jq '.translations | length')
+    local lang_name
+    lang_name=$(echo "$lang_entry" | jq -r '.language')
+    echo "Found $count translation(s) for language: $lang_name"
+    echo
+    echo "$lang_entry" | jq -r '.translations[] | "\(.short_name)\t\(.full_name)"'
+    exit 0
+  fi
 
   if [[ -z "$ref" ]]; then
     echo "❌ Please provide a reference like \"John 3:16\" or \"John 3\"."
