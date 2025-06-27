@@ -55,10 +55,14 @@ GNU General Public License v3.0
 ## Todos
 - [X] `KJV` uses non-Strong’s number version of KJV
 - [X] Verses spanning multiple paragraphs
-- [ ] Listing available translations (for a language)
+- [X] Listing available translations (for a language)
 - [X] Support for abbreviated chapter names
-- [ ] Support for Jewish verse numbering
-- [ ] Formatting
+- [X] Support for Jewish verse numbering
+- [X] Formatting
+  - [X] Chapter:Verse
+  - [X] Verse numbers in square brackets
+  - [X] No verse numbers
+  - [X] One-line output for multiple verses
 - [ ] Random verse
 - [ ] Definition for Hebrew and Greek words
 - [ ] Verse searching

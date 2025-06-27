@@ -8,6 +8,10 @@
 translation="WEB"
 include_strongs=false
 
+# Verse formatting options
+verse_style="default"  # default, chapter, brackets, none
+one_line=false
+
 # Jewish/Masoretic reference mode flag
 # When true, remaps references to Jewish chapter/verse numbering for known books.
 # This affects output references and fetched verses.
@@ -276,8 +280,32 @@ fetch_from_bolls() {
     json=$(curl -s --max-time 5 "$url")
 
     if echo "$json" | grep -q 'text'; then
-      eval "echo \"\$json\" | jq -r '\"\(.verse). \(.text)\"' \
-        | sed -E \"$strong_pattern; s:<sup>[^<]*</sup>::g; s:<[^>]+>::g; s/ +([,.;:?!])/\1/g\""
+      # Build jq filter per verse_style
+case "$verse_style" in
+  none)
+    jq_filter='.[] | .text'
+    ;;
+  brackets)
+    jq_filter='.[] | "[" + (.verse|tostring) + "] " + .text'
+    ;;
+  chapter)
+    jq_filter='.[] | "'$BOOK' '$chapter':" + (.verse|tostring) + " " + .text'
+    ;;
+  *)
+    jq_filter='.[] | (.verse|tostring) + ". " + .text'
+    ;;
+esac
+
+# Generate and clean output
+output=$(echo "$json" | jq -r "$jq_filter" \
+  | sed -E "$strong_pattern; s:<sup>[^<]*</sup>::g; s:<[^>]+>::g; s/ +([,.;:?!])/\1/g")
+
+# Join into one line if requested
+if [[ "$one_line" == true ]]; then
+  output=$(echo "$output" | tr '\n' ' ')
+fi
+
+echo "$output"
     else
       echo "❌ Could not retrieve verse." >&2
       return 1
@@ -286,7 +314,7 @@ fetch_from_bolls() {
   # Case 2: Range of verses
   elif [[ ${#VERSE_RANGE[@]} -gt 0 ]]; then
     local verses_json
-verses_json=$(printf '%s\n' "${VERSE_RANGE[@]}" | jq -R 'tonumber' | jq -s .)
+    verses_json=$(printf '%s\n' "${VERSE_RANGE[@]}" | jq -R 'tonumber' | jq -s .)
 
     local body
     body=$(jq -n \
@@ -308,8 +336,32 @@ verses_json=$(printf '%s\n' "${VERSE_RANGE[@]}" | jq -R 'tonumber' | jq -s .)
       -d "$body" https://bolls.life/get-verses/)
 
     if echo "$json" | jq empty 2>/dev/null; then
-      eval "echo \"\$json\" | jq -r '.[0][] | \"\(.verse). \(.text)\"' \
-        | sed -E \"$strong_pattern; s:<sup>[^<]*</sup>::g; s:<[^>]+>::g; s/ +([,.;:?!])/\1/g\""
+      # Build jq filter per verse_style
+      case "$verse_style" in
+        none)
+          jq_filter='.text'
+          ;;
+        brackets)
+          jq_filter='"[" + (.verse|tostring) + "] " + .text'
+          ;;
+        chapter)
+          jq_filter='"'$chapter':" + (.verse|tostring) + " " + .text'
+          ;;
+        *)
+          jq_filter='(.verse|tostring) + ". " + .text'
+          ;;
+      esac
+
+      # Generate and clean output
+      output=$(echo "$json" | jq -r '.[][] | '"$jq_filter" \
+        | sed -E "$strong_pattern; s:<sup>[^<]*</sup>::g; s:<[^>]+>::g; s/ +([,.;:?!])/\1/g")
+
+      # Join into one line if requested
+      if [[ "$one_line" == true ]]; then
+        output=$(echo "$output" | tr '\n' ' ')
+      fi
+
+      echo "$output"
     else
       echo "❌ Could not retrieve multiple verses." >&2
       return 1
@@ -322,8 +374,32 @@ verses_json=$(printf '%s\n' "${VERSE_RANGE[@]}" | jq -R 'tonumber' | jq -s .)
     json=$(curl -s --max-time 5 "$url")
 
     if echo "$json" | grep -q 'text'; then
-      eval "echo \"\$json\" | jq -r '.[] | \"\(.verse). \(.text)\"' \
-        | sed -E \"$strong_pattern; s:<sup>[^<]*</sup>::g; s:<[^>]+>::g; s/ +([,.;:?!])/\1/g\""
+      # Build jq filter per verse_style
+      case "$verse_style" in
+        none)
+          jq_filter='.[] | .text'
+          ;;
+        brackets)
+          jq_filter='.[] | "[" + (.verse|tostring) + "] " + .text'
+          ;;
+        chapter)
+          jq_filter='.[] | "'$chapter':" + (.verse|tostring) + " " + .text'
+          ;;
+        *)
+          jq_filter='.[] | (.verse|tostring) + ". " + .text'
+          ;;
+      esac
+
+      # Generate and clean output
+      output=$(echo "$json" | jq -r "$jq_filter" \
+        | sed -E "$strong_pattern; s:<sup>[^<]*</sup>::g; s:<[^>]+>::g; s/ +([,.;:?!])/\1/g")
+
+      # Join into one line if requested
+      if [[ "$one_line" == true ]]; then
+        output=$(echo "$output" | tr '\n' ' ')
+      fi
+
+      echo "$output"
     else
       echo "❌ Could not retrieve chapter." >&2
       return 1
@@ -402,7 +478,27 @@ bible() {
         echo "  -l, --list LANG    List available translations for a language (case-insensitive substring match)"
         echo "  -s, --strong       Include Strong's numbers (if available)"
         echo "  -h, --help         Show this help"
+        echo "  -c, --chapter      Show verse numbers as chapter:verse"
+        echo "  -b, --brackets     Show verse numbers in square brackets"
+        echo "  -n, --no-verse     Do not show verse numbers"
+        echo "  -o, --one-line     Output all verses on one line (no line breaks)"
         exit 0
+        ;;
+      -c|--chapter)
+        verse_style="chapter"
+        shift
+        ;;
+      -b|--brackets)
+        verse_style="brackets"
+        shift
+        ;;
+      -n|--no-verse)
+        verse_style="none"
+        shift
+        ;;
+      -o|--one-line)
+        one_line=true
+        shift
         ;;
       -*)
         echo "Unknown option: $1"
