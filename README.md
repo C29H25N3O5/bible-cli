@@ -4,7 +4,7 @@
 
 # 📖 bible-cli (WIP)
 
-🚧🚧🚧 WIP, NOT READY FOR DOWNLOAD YET 🚧🚧🚧
+🚧🚧🚧 **WIP, NOT READY FOR DOWNLOAD YET** 🚧🚧🚧
 
 `bible-cli` is a simple command-line tool to fetch and display Bible passages directly in your terminal. It uses the [Bolls API](https://bolls.life/api/#Random%20verse) to retrieve scripture in plain text with support for multiple translations.
 
@@ -14,11 +14,15 @@
 
 - 🔍 Fetch Bible passages by reference (e.g., `John 3:16`)
 - 🗣 Choose between translations (e.g., `--translation kjv`)
-- 🔢 Toggle verse numbers (`--verse`)
-- 🧾 Append reference and translation info (`--info`)
+- 🔢 Show verse numbers with multiple formatting options
+- 🧾 Append reference and translation info
 - 📋 Copy to clipboard (`--copy`)
-- 📜 Output formatting options (multi-line or single paragraph)
+- 📜 Output formatting options (multi-line, single paragraph, one-line)
 - 🐞 Debug mode to inspect raw API response
+- 💪 Show Strong's numbers
+- 🎲 Get a random verse
+- 📜 List available translations for a language
+- ✡️ Use Jewish verse/chapter numbering
 
 ## 🚀 Usage
 
@@ -29,13 +33,20 @@ bible [options] "Book Chapter:Verse"
 ### Example
 
 ```bash
-bible -v -i -t web Romans 8:38-39
+bible -v -i -t web -s -r -l -c -b -n -o -j Romans 8:38-39
 ```
 
 ## 🛠 Options
 
 - `-v`, `--verse`: Show verse numbers
-- `-n`, `--no-break`: Output as a single paragraph
+- `-c`, `--chapter`: Show chapter:verse instead of just verse numbers
+- `-b`, `--brackets`: Show verse numbers in square brackets
+- `-n`, `--no-verse`: Do not show verse numbers
+- `-o`, `--one-line`: Display multiple verses in one line
+- `-j`, `--jewish`: Use Jewish verse/chapter numbering
+- `-s`, `--strong`: Show Strong's numbers
+- `-r`, `--random`: Get a random verse
+- `-l`, `--list`: List available translations for a language
 - `-i`, `--info`: Show reference and translation info
 - `-t`, `--translation`: Choose Bible version (web, kjv, etc.)
 - `-c`, `--copy`: Copy output to clipboard
@@ -63,7 +74,8 @@ GNU General Public License v3.0
   - [X] Verse numbers in square brackets
   - [X] No verse numbers
   - [X] One-line output for multiple verses
-- [ ] Random verse
+- [X] Random verse
+  - [ ] Make it compatible with the `-s` tag
 - [ ] Definition for Hebrew and Greek words
 - [ ] Verse searching
 - [ ] Reference tagging (?)

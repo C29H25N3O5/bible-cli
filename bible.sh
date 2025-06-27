@@ -11,6 +11,7 @@ include_strongs=false
 # Verse formatting options
 verse_style="default"  # default, chapter, brackets, none
 one_line=false
+random_verse=false
 
 # Jewish/Masoretic reference mode flag
 # When true, remaps references to Jewish chapter/verse numbering for known books.
@@ -268,9 +269,9 @@ fetch_from_bolls() {
 
   # Determine how to handle Strong's tags
   if [[ "$include_strongs" == true ]]; then
-    strong_pattern="s:<S>([0-9]+)</S>:(\\1):g"
+    strong_pattern='s|<S>([0-9]+)</S>|(\1)|g'
   else
-    strong_pattern="s:<S>[0-9]+</S>::g"
+    strong_pattern='s|<S>[0-9]+</S>||g'
   fi
 
   # Case 1: Single verse
@@ -281,31 +282,31 @@ fetch_from_bolls() {
 
     if echo "$json" | grep -q 'text'; then
       # Build jq filter per verse_style
-case "$verse_style" in
-  none)
-    jq_filter='.[] | .text'
-    ;;
-  brackets)
-    jq_filter='.[] | "[" + (.verse|tostring) + "] " + .text'
-    ;;
-  chapter)
-    jq_filter='.[] | "'$BOOK' '$chapter':" + (.verse|tostring) + " " + .text'
-    ;;
-  *)
-    jq_filter='.[] | (.verse|tostring) + ". " + .text'
-    ;;
-esac
+      case "$verse_style" in
+        none)
+          jq_filter='.text'
+          ;;
+        brackets)
+          jq_filter='"[" + (.verse|tostring) + "] " + .text'
+          ;;
+        chapter)
+          jq_filter='"'$BOOK' '$chapter':" + (.verse|tostring) + " " + .text'
+          ;;
+        *)
+          jq_filter='(.verse|tostring) + ". " + .text'
+          ;;
+      esac
 
-# Generate and clean output
-output=$(echo "$json" | jq -r "$jq_filter" \
-  | sed -E "$strong_pattern; s:<sup>[^<]*</sup>::g; s:<[^>]+>::g; s/ +([,.;:?!])/\1/g")
+      # Generate and clean output
+      output=$(echo "$json" | jq -r "$jq_filter" \
+        | sed -E "$strong_pattern" | sed -E 's;<sup>[^<]*</sup>;;g; s;<[^>]+>;;g; s/ +([,.;:?!])/\1/g')
 
-# Join into one line if requested
-if [[ "$one_line" == true ]]; then
-  output=$(echo "$output" | tr '\n' ' ')
-fi
+      # Join into one line if requested
+      if [[ "$one_line" == true ]]; then
+        output=$(echo "$output" | tr '\n' ' ')
+      fi
 
-echo "$output"
+      echo "$output"
     else
       echo "❌ Could not retrieve verse." >&2
       return 1
@@ -354,7 +355,7 @@ echo "$output"
 
       # Generate and clean output
       output=$(echo "$json" | jq -r '.[][] | '"$jq_filter" \
-        | sed -E "$strong_pattern; s:<sup>[^<]*</sup>::g; s:<[^>]+>::g; s/ +([,.;:?!])/\1/g")
+        | sed -E "$strong_pattern" | sed -E 's;<sup>[^<]*</sup>;;g; s;<[^>]+>;;g; s/ +([,.;:?!])/\1/g')
 
       # Join into one line if requested
       if [[ "$one_line" == true ]]; then
@@ -392,7 +393,7 @@ echo "$output"
 
       # Generate and clean output
       output=$(echo "$json" | jq -r "$jq_filter" \
-        | sed -E "$strong_pattern; s:<sup>[^<]*</sup>::g; s:<[^>]+>::g; s/ +([,.;:?!])/\1/g")
+        | sed -E "$strong_pattern" | sed -E 's;<sup>[^<]*</sup>;;g; s;<[^>]+>;;g; s/ +([,.;:?!])/\1/g')
 
       # Join into one line if requested
       if [[ "$one_line" == true ]]; then
@@ -482,6 +483,7 @@ bible() {
         echo "  -b, --brackets     Show verse numbers in square brackets"
         echo "  -n, --no-verse     Do not show verse numbers"
         echo "  -o, --one-line     Output all verses on one line (no line breaks)"
+        echo "  -r, --random       Fetch a random verse (requires -t for translation)"
         exit 0
         ;;
       -c|--chapter)
@@ -498,6 +500,10 @@ bible() {
         ;;
       -o|--one-line)
         one_line=true
+        shift
+        ;;
+      -r|--random)
+        random_verse=true
         shift
         ;;
       -*)
@@ -537,6 +543,62 @@ bible() {
     echo
     echo "$lang_entry" | jq -r '.translations[] | "\(.short_name)\t\(.full_name)"'
     exit 0
+  fi
+
+  # Handle random verse flag
+  if [[ "$random_verse" == true ]]; then
+    if [[ -z "$translation" ]]; then
+      echo "❌ Please specify a translation with -t for random verse."
+      exit 1
+    fi
+
+    json=$(curl -s --max-time 5 "https://bolls.life/get-random-verse/$translation/")
+    if echo "$json" | grep -q 'text'; then
+      BOOK_ID=$(echo "$json" | jq -r '.book')
+      CHAPTER=$(echo "$json" | jq -r '.chapter')
+      VERSE=$(echo "$json" | jq -r '.verse')
+
+      # Lookup book name from book id
+      BOOK=$(curl -s --max-time 5 "https://bolls.life/get-books/$translation/" | jq -r --argjson bid "$BOOK_ID" '.[] | select(.bookid == $bid) | .name')
+
+      VERSE_RANGE=()
+      verse_text=$(echo "$json" | jq -r '.text')
+
+      case "$verse_style" in
+        none)
+          formatted="$verse_text"
+          ;;
+        brackets)
+          formatted="[$VERSE] $verse_text"
+          ;;
+        chapter)
+          formatted="$BOOK $CHAPTER:$VERSE $verse_text"
+          ;;
+        *)
+          formatted="$BOOK $CHAPTER:$VERSE $verse_text"
+          ;;
+      esac
+
+      if [[ "$include_strongs" == false ]]; then
+        formatted=$(echo "$formatted" | sed -E 's|<S>[0-9]\+</S>||g')
+      else
+        formatted=$(echo "$formatted" | sed -E 's|<S>[0-9]\+</S>|(\0)|g; s|<S>\([0-9]\+\)</S>|(\1)|g')
+      fi
+
+      # Clean HTML tags
+      formatted=$(echo "$formatted" | sed -E 's:<sup>[^<]*</sup>::g; s:<[^>]+>::g; s/ +([,.;:?!])/\1/g')
+
+      # Collapse into one line if necessary
+      if [[ "$one_line" == true ]]; then
+        formatted=$(echo "$formatted" | tr '\n' ' ')
+      fi
+
+      echo "$formatted"
+      exit 0
+    else
+      echo "❌ Could not fetch random verse." >&2
+      exit 1
+    fi
   fi
 
   if [[ -z "$ref" ]]; then
