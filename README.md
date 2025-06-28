@@ -38,16 +38,18 @@ bible -v -i -t web -s -r -l -c -b -n -o -j Romans 8:38-39
 
 ## 🛠 Options
 
-- `-t`, `--translation`: Specify translation short code (default: WEB)"
-- `-j`, `--jewish`: Use Jewish/Masoretic numbering for known books"
-- `-l`, `--list` LANG: List available translations for a language (case-insensitive substring match)"
-- `-s`, `--strong`: Include Strong's numbers (if available)"
-- `-h`, `--help`: Show this help"
-- `--ch`, `--chapter`: Show verse numbers as chapter:verse"
-- `-b`, `--brackets`: Show verse numbers in square brackets"
-- `-n`, `--no`-verse: Do not show verse numbers"
-- `-o`, `--one`-line: Output all verses on one line (no line breaks)"
-- `-r`, `--random`: Fetch a random verse (requires -t for translation)"
+- `-t`, `--translation`: Specify translation short code (default: WEB)
+- `-j`, `--jewish`: Use Jewish/Masoretic numbering for known books
+- `-l`, `--list` `LANG`: List available translations for a language (case-insensitive substring match)
+- `-s`, `--strong`: Include Strong's numbers (if available)
+- `-d`, `--divine-name` `STR`  Replace the divine name with STR (e.g., 'YHWH', 'Yahweh', or "LORD")
+- `-h`, `--help`: Show help info
+- `--ch`, `--chapter`: Show verse numbers as chapter:verse
+- `-c`, `--copy`: Copy output to clipboard
+- `-b`, `--brackets`: Show verse numbers in square brackets
+- `-n`, `--no`-verse: Do not show verse numbers
+- `-o`, `--one`-line: Output all verses on one line (no line breaks)
+- `-r`, `--random`: Fetch a random verse (requires -t for translation)
 
 ## 📦 Installation (WIP)
 
@@ -72,6 +74,7 @@ GNU General Public License v3.0
   - [X] One-line output for multiple verses
 - [X] Random verse
   - [ ] Make it compatible with the `-s` tag
+- [X] Divine name substitution
 - [ ] Definition for Hebrew and Greek words
 - [ ] Verse searching
 - [ ] Reference tagging (?)

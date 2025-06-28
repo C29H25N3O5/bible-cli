@@ -41,6 +41,10 @@ include_strongs=false
 verse_style="default"  # default, chapter, brackets, none
 one_line=false
 random_verse=false
+copy_output=false
+
+# Divine name output mode
+divine_name_mode=""
 
 # Jewish/Masoretic reference mode flag
 # When true, remaps references to Jewish chapter/verse numbering for known books.
@@ -495,6 +499,13 @@ handle_multi_reference() {
 bible_cli() {
   local ref=""
   local list_language=""
+  # Check for no arguments passed
+  if [[ $# -eq 0 ]]; then
+    echo "❌ Please provide a reference like \"John 3:16\" or \"John 3\"."
+    echo
+    "$0" --help
+    exit 1
+  fi
   while [[ $# -gt 0 ]]; do
     case "$1" in
       -t|--translation)
@@ -518,21 +529,31 @@ bible_cli() {
         list_language="$2"
         shift 2
         ;;
+      -c|--copy)
+        copy_output=true
+        shift
+        ;;
+      -d|--divine-name)
+        divine_name_mode="$2"
+        shift 2
+        ;;
       -h|--help)
         echo "Usage: bible [-t translation] [-j|--jewish] [-l language] \"Book Chapter[:Verse]\""
-        echo "  -t, --translation  Specify translation short code (default: WEB)"
-        echo "  -j, --jewish       Use Jewish/Masoretic numbering for known books"
-        echo "  -l, --list LANG    List available translations for a language (case-insensitive substring match)"
-        echo "  -s, --strong       Include Strong's numbers (if available)"
-        echo "  -h, --help         Show this help"
-        echo "  --ch, --chapter    Show verse numbers as chapter:verse"
-        echo "  -b, --brackets     Show verse numbers in square brackets"
-        echo "  -n, --no-verse     Do not show verse numbers"
-        echo "  -o, --one-line     Output all verses on one line (no line breaks)"
-        echo "  -r, --random       Fetch a random verse (requires -t for translation)"
+        echo "   -t, --translation      Specify translation short code (default: WEB)"
+        echo "   -j, --jewish           Use Jewish/Masoretic numbering for known books"
+        echo "   -l, --list LANG        List available translations for a language (case-insensitive substring match)"
+        echo "   -s, --strong           Include Strong's numbers (if available)"
+        echo "   -d, --divine-name STR  Replace the divine name with STR (e.g., 'YHWH', 'Yahweh', or "LORD")"
+        echo "   -h, --help             Show this help"
+        echo " --ch, --chapter          Show verse numbers as chapter:verse"
+        echo "   -b, --brackets         Show verse numbers in square brackets"
+        echo "   -n, --no-verse         Do not show verse numbers"
+        echo "   -o, --one-line         Output all verses on one line (no line breaks)"
+        echo "   -r, --random           Fetch a random verse (requires -t for translation)"
+        echo "   -c, --copy             Copy output to clipboard"
         exit 0
         ;;
-      -ch|--chapter)
+      --ch|--chapter)
         verse_style="chapter"
         shift
         ;;
@@ -553,7 +574,9 @@ bible_cli() {
         shift
         ;;
       -*)
-        echo "Unknown option: $1"
+        echo "❌ Unknown option: $1"
+        echo
+        "$0" --help
         exit 1
         ;;
       *)
@@ -589,6 +612,12 @@ bible_cli() {
     echo
     echo "$lang_entry" | jq -r '.translations[] | "\(.short_name)\t\(.full_name)"'
     exit 0
+  fi
+
+  # Normalize divine_name_mode (case-insensitive) and preserve original input for substitution
+  if [[ -n "$divine_name_mode" ]]; then
+    divine_name_mode_input="$divine_name_mode"
+    divine_name_mode="$(echo "$divine_name_mode" | tr '[:upper:]' '[:lower:]')"
   fi
 
   # Handle random verse flag
@@ -639,7 +668,27 @@ bible_cli() {
         formatted=$(echo "$formatted" | tr '\n' ' ')
       fi
 
+      # Divine name substitution
+      if [[ -n "$divine_name_mode" ]]; then
+        if [[ "$divine_name_mode" == "lord" ]]; then
+          formatted=$(echo "$formatted" | sed -E \
+            -e 's/\bLord (YHWH|Yahweh)\b/Lord GOD/g' \
+            -e 's/\b(YHWH|Yahweh)\b/the LORD/g')
+        else
+          formatted=$(echo "$formatted" | sed -E \
+            -e 's/\bLord (YHWH|Yahweh|GOD)\b/Lord '"$divine_name_mode_input"'/g' \
+            -e 's/\b(YHWH|Yahweh|the LORD)\b/'"$divine_name_mode_input"'/g')
+        fi
+      fi
+
       echo "$formatted"
+      if [[ "$copy_output" == true ]]; then
+        if ! echo "$formatted" | pbcopy; then
+          echo "⚠️  Failed to copy to clipboard." >&2
+        else
+          echo "📋 Copied to clipboard."
+        fi
+      fi
       exit 0
     else
       echo "❌ Could not fetch random verse." >&2
@@ -649,7 +698,6 @@ bible_cli() {
 
   if [[ -z "$ref" ]]; then
     echo "❌ Please provide a reference like \"John 3:16\" or \"John 3\"."
-    exit 1
   fi
 
   # Handle comma- or semicolon-separated references
@@ -679,7 +727,30 @@ bible_cli() {
     echo "Jewish/Masoretic numbering: $BOOK ${CHAPTER}${VERSE:+:$VERSE}"
   fi
 
-  fetch_from_bolls "$bookid" "$CHAPTER" "$VERSE" "$translation"
+  result=$(fetch_from_bolls "$bookid" "$CHAPTER" "$VERSE" "$translation")
+  # Divine name substitution (robust, supports compounds like YHWH-Jireh)
+  if [[ -n "$divine_name_mode" ]]; then
+    RENDERED_NAME="$divine_name_mode_input"
+    if [[ "$divine_name_mode" == "lord" ]]; then
+      # Step 1: Replace "Lord YHWH" or "Lord Yahweh" with "Lord GOD"
+      result=$(echo "$result" | sed -E \
+        -e 's/(^|[^[:alnum:]])Lord[[:space:]]+(YHWH|Yahweh)([^[:alnum:]]|$)/\1Lord GOD\3/g' \
+        -e 's/(^|[^[:alnum:]])(YHWH|Yahweh)([-–—][[:upper:]][[:lower:]]+)?([^[:alnum:]]|$)/\1the LORD\3\4/g')
+    else
+      # Step 1: Replace "Lord YHWH", "Lord Yahweh", or "Lord GOD" with "Lord $RENDERED_NAME"
+      result=$(echo "$result" | sed -E \
+        -e 's/(^|[^[:alnum:]])Lord[[:space:]]+(YHWH|Yahweh|GOD)([^[:alnum:]]|$)/\1Lord '"$RENDERED_NAME"'\3/g' \
+        -e 's/(^|[^[:alnum:]])(YHWH|Yahweh|the LORD)([-–—][[:upper:]][[:lower:]]+)?([^[:alnum:]]|$)/\1'"$RENDERED_NAME"'\3\4/g')
+    fi
+  fi
+  echo "$result"
+  if [[ "$copy_output" == true ]]; then
+    if ! echo "$result" | pbcopy; then
+      echo "⚠️  Failed to copy to clipboard." >&2
+    else
+      echo "📋 Copied to clipboard."
+    fi
+  fi
 }
 
 # Entry point
