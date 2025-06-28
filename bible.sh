@@ -728,19 +728,23 @@ bible_cli() {
   fi
 
   result=$(fetch_from_bolls "$bookid" "$CHAPTER" "$VERSE" "$translation")
-  # Divine name substitution (robust, supports compounds like YHWH-Jireh)
+  # Divine name substitution (BSD sed compatible, robust, covers LORD, Lord GOD, compounds, case-insensitive)
   if [[ -n "$divine_name_mode" ]]; then
-    RENDERED_NAME="$divine_name_mode_input"
+    RENDERED_NAME="$divine_name_mode_input"          # Preserve user’s exact string
     if [[ "$divine_name_mode" == "lord" ]]; then
-      # Step 1: Replace "Lord YHWH" or "Lord Yahweh" with "Lord GOD"
+      # --- LORD‑style output ---
+      # 1. Lord YHWH / Lord Yahweh  →  Lord GOD
+      # 2. the LORD / The Lord / YHWH / Yahweh → the LORD
       result=$(echo "$result" | sed -E \
-        -e 's/(^|[^[:alnum:]])Lord[[:space:]]+(YHWH|Yahweh)([^[:alnum:]]|$)/\1Lord GOD\3/g' \
-        -e 's/(^|[^[:alnum:]])(YHWH|Yahweh)([-–—][[:upper:]][[:lower:]]+)?([^[:alnum:]]|$)/\1the LORD\3\4/g')
+        -e 's/(^|[^[:alnum:]])(Lord)[[:space:]]+(YHWH|Yahweh)([^[:alnum:]]|$)/\1\2 GOD\4/g' \
+        -e 's/(^|[^[:alnum:]])([Tt]he[[:space:]]+Lord|the LORD|YHWH|Yahweh)([^[:alnum:]]|$)/\1the LORD\3/g' )
     else
-      # Step 1: Replace "Lord YHWH", "Lord Yahweh", or "Lord GOD" with "Lord $RENDERED_NAME"
+      # --- Custom output (YHWH, Yahweh, Hashem, etc.) ---
+      # 1. Lord YHWH / Lord Yahweh / Lord GOD → Lord <NAME>
+      # 2. the LORD / The Lord / YHWH / Yahweh → <NAME>
       result=$(echo "$result" | sed -E \
-        -e 's/(^|[^[:alnum:]])Lord[[:space:]]+(YHWH|Yahweh|GOD)([^[:alnum:]]|$)/\1Lord '"$RENDERED_NAME"'\3/g' \
-        -e 's/(^|[^[:alnum:]])(YHWH|Yahweh|the LORD)([-–—][[:upper:]][[:lower:]]+)?([^[:alnum:]]|$)/\1'"$RENDERED_NAME"'\3\4/g')
+        -e 's/(^|[^[:alnum:]])Lord[[:space:]]+(YHWH|Yahweh|GOD|God)([^[:alnum:]]|$)/\1Lord '"$RENDERED_NAME"'\3/g' \
+        -e 's/(^|[^[:alnum:]])([Tt]he[[:space:]]+Lord|the LORD|YHWH|Yahweh)([^[:alnum:]]|$)/\1'"$RENDERED_NAME"'\3/g' )
     fi
   fi
   echo "$result"

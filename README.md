@@ -12,17 +12,16 @@
 
 ## ✨ Features
 
-- 🔍 Fetch Bible passages by reference (e.g., `John 3:16`)
-- 🗣 Choose between translations (e.g., `--translation kjv`)
-- 🔢 Show verse numbers with multiple formatting options
-- 🧾 Append reference and translation info
-- 📋 Copy to clipboard (`--copy`)
-- 📜 Output formatting options (multi-line, single paragraph, one-line)
-- 🐞 Debug mode to inspect raw API response
-- 💪 Show Strong's numbers
-- 🎲 Get a random verse
-- 📜 List available translations for a language
-- ✡️ Use Jewish verse/chapter numbering
+- 🔍 Fetch Bible passages by reference (supports complex formats and abbreviations)
+- 🌍 Choose between translations (case-insensitive via `--translation` or `-t`)
+- 🔠 Flexible verse number display (standard, brackets, none, chapter:verse)
+- 🧾 Show Strong's numbers (with optional substitution formatting)
+- ✂️ Replace the divine name (YHWH, Yahweh, etc.) with customizable output
+- 🎲 Get a random verse (`--random`)
+- 📜 List available translations by language (`--list`)
+- ✡️ Use Jewish verse/chapter numbering (`--jewish`)
+- 🧪 Debug mode to inspect API response
+- 📋 Copy output to clipboard (`--copy`)
 
 ## 🚀 Usage
 
@@ -33,23 +32,26 @@ bible [options] "Book Chapter:Verse"
 ### Example
 
 ```bash
-bible -v -i -t web -s -r -l -c -b -n -o -j Romans 8:38-39
+$ bible -t NIV -d "YHWH" --ch "Deut 6:4-5"
+
+6:4 Hear, O Israel: YHWH our God, YHWH is one.
+6:5 Love YHWH your God with all your heart and with all your soul and with all your strength.
 ```
 
 ## 🛠 Options
 
-- `-t`, `--translation`: Specify translation short code (default: WEB)
+- `-t`, `--translation` STR: Specify translation short code (case-insensitive; default: WEB)
 - `-j`, `--jewish`: Use Jewish/Masoretic numbering for known books
-- `-l`, `--list` `LANG`: List available translations for a language (case-insensitive substring match)
+- `-l`, `--list` LANG: List available translations for a language (case-insensitive match)
 - `-s`, `--strong`: Include Strong's numbers (if available)
-- `-d`, `--divine-name` `STR`  Replace the divine name with STR (e.g., 'YHWH', 'Yahweh', or "LORD")
-- `-h`, `--help`: Show help info
-- `--ch`, `--chapter`: Show verse numbers as chapter:verse
+- `-d`, `--divine-name` STR: Replace the divine name with STR (e.g., 'YHWH', 'Yahweh', or 'LORD')
+- `-r`, `--random`: Fetch a random verse (requires `-t`)
 - `-c`, `--copy`: Copy output to clipboard
+- `--ch`, `--chapter`: Show verse numbers as Chapter:Verse
 - `-b`, `--brackets`: Show verse numbers in square brackets
-- `-n`, `--no`-verse: Do not show verse numbers
-- `-o`, `--one`-line: Output all verses on one line (no line breaks)
-- `-r`, `--random`: Fetch a random verse (requires -t for translation)
+- `-n`, `--no-verse`: Omit verse numbers
+- `-o`, `--one-line`: Output all verses in one line
+- `-h`, `--help`: Show help information
 
 ## 📦 Installation (WIP)
 
@@ -73,7 +75,7 @@ GNU General Public License v3.0
   - [X] No verse numbers
   - [X] One-line output for multiple verses
 - [X] Random verse
-  - [ ] Make it compatible with the `-s` tag
+  - [ ] Make random verse compatible with the `-s` tag
 - [X] Divine name substitution
 - [ ] Definition for Hebrew and Greek words
 - [ ] Verse searching
