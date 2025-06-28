@@ -38,20 +38,16 @@ bible -v -i -t web -s -r -l -c -b -n -o -j Romans 8:38-39
 
 ## 🛠 Options
 
-- `-v`, `--verse`: Show verse numbers
-- `-c`, `--chapter`: Show chapter:verse instead of just verse numbers
-- `-b`, `--brackets`: Show verse numbers in square brackets
-- `-n`, `--no-verse`: Do not show verse numbers
-- `-o`, `--one-line`: Display multiple verses in one line
-- `-j`, `--jewish`: Use Jewish verse/chapter numbering
-- `-s`, `--strong`: Show Strong's numbers
-- `-r`, `--random`: Get a random verse
-- `-l`, `--list`: List available translations for a language
-- `-i`, `--info`: Show reference and translation info
-- `-t`, `--translation`: Choose Bible version (web, kjv, etc.)
-- `-c`, `--copy`: Copy output to clipboard
-- `-d`, `--debug`: Print debug info and raw API response
-- `-h`, `--help`: Show help message
+- `-t`, `--translation`: Specify translation short code (default: WEB)"
+- `-j`, `--jewish`: Use Jewish/Masoretic numbering for known books"
+- `-l`, `--list` LANG: List available translations for a language (case-insensitive substring match)"
+- `-s`, `--strong`: Include Strong's numbers (if available)"
+- `-h`, `--help`: Show this help"
+- `--ch`, `--chapter`: Show verse numbers as chapter:verse"
+- `-b`, `--brackets`: Show verse numbers in square brackets"
+- `-n`, `--no`-verse: Do not show verse numbers"
+- `-o`, `--one`-line: Output all verses on one line (no line breaks)"
+- `-r`, `--random`: Fetch a random verse (requires -t for translation)"
 
 ## 📦 Installation (WIP)
 

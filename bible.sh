@@ -1,3 +1,32 @@
+# Normalize translation code input to match available codes (case-insensitive).
+normalize_translation() {
+  local user_code="$translation_input"
+  local lc_user="$(echo "$user_code" | tr '[:upper:]' '[:lower:]')"
+  LANG_CACHE="$HOME/.cache/bible-cli/languages.json"
+  mkdir -p "$(dirname "$LANG_CACHE")"
+  if [[ ! -f "$LANG_CACHE" ]]; then
+    curl -sSfL --max-time 5 "https://bolls.life/static/bolls/app/views/languages.json" \
+      -o "$LANG_CACHE"
+  fi
+
+  if jq -r '.[].translations[].short_name' "$LANG_CACHE" | grep -qx "$user_code"; then
+    translation="$user_code"
+    return
+  fi
+
+  local match
+  match=$(jq -r --arg u "$lc_user" '
+    [.[] .translations[].short_name]
+    | map(select(ascii_downcase == $u))
+    | .[0] // ""
+  ' "$LANG_CACHE")
+  if [[ -n "$match" ]]; then
+    translation="$match"
+  else
+    echo "❌ Unknown translation: $user_code" >&2
+    exit 1
+  fi
+}
 #!/bin/bash
 
 # bible.sh - Fetch Bible verses or chapters using the Bolls API
@@ -306,6 +335,11 @@ fetch_from_bolls() {
         output=$(echo "$output" | tr '\n' ' ')
       fi
 
+      # Check for Strong's numbers if requested
+      if [[ "$include_strongs" == true && "$output" != *"&lt;S&gt;"* && "$output" != *"<S>"* ]]; then
+        echo "ℹ️  No Strong's numbers found in the selected verses."
+      fi
+
       echo "$output"
     else
       echo "❌ Could not retrieve verse." >&2
@@ -362,6 +396,11 @@ fetch_from_bolls() {
         output=$(echo "$output" | tr '\n' ' ')
       fi
 
+      # Check for Strong's numbers if requested
+      if [[ "$include_strongs" == true && "$output" != *"&lt;S&gt;"* && "$output" != *"<S>"* ]]; then
+        echo "ℹ️  No Strong's numbers found in the selected verses."
+      fi
+
       echo "$output"
     else
       echo "❌ Could not retrieve multiple verses." >&2
@@ -398,6 +437,11 @@ fetch_from_bolls() {
       # Join into one line if requested
       if [[ "$one_line" == true ]]; then
         output=$(echo "$output" | tr '\n' ' ')
+      fi
+
+      # Check for Strong's numbers if requested
+      if [[ "$include_strongs" == true && "$output" != *"&lt;S&gt;"* && "$output" != *"<S>"* ]]; then
+        echo "ℹ️  No Strong's numbers found in the selected verses."
       fi
 
       echo "$output"
@@ -446,14 +490,16 @@ handle_multi_reference() {
 }
 
 
+#
 # Main CLI handler
-bible() {
+bible_cli() {
   local ref=""
   local list_language=""
   while [[ $# -gt 0 ]]; do
     case "$1" in
       -t|--translation)
-        translation="$2"
+        translation_input="$2"
+        normalize_translation
         shift 2
         ;;
       --book-id)
@@ -474,19 +520,19 @@ bible() {
         ;;
       -h|--help)
         echo "Usage: bible [-t translation] [-j|--jewish] [-l language] \"Book Chapter[:Verse]\""
-        echo "  -t, --translation   Specify translation short code (default: WEB)"
+        echo "  -t, --translation  Specify translation short code (default: WEB)"
         echo "  -j, --jewish       Use Jewish/Masoretic numbering for known books"
         echo "  -l, --list LANG    List available translations for a language (case-insensitive substring match)"
         echo "  -s, --strong       Include Strong's numbers (if available)"
         echo "  -h, --help         Show this help"
-        echo "  -c, --chapter      Show verse numbers as chapter:verse"
+        echo "  --ch, --chapter    Show verse numbers as chapter:verse"
         echo "  -b, --brackets     Show verse numbers in square brackets"
         echo "  -n, --no-verse     Do not show verse numbers"
         echo "  -o, --one-line     Output all verses on one line (no line breaks)"
         echo "  -r, --random       Fetch a random verse (requires -t for translation)"
         exit 0
         ;;
-      -c|--chapter)
+      -ch|--chapter)
         verse_style="chapter"
         shift
         ;;
@@ -637,4 +683,4 @@ bible() {
 }
 
 # Entry point
-bible "$@"
+bible_cli "$@"
